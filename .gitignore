@@ -1,0 +1,11 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node
+node_modules/
+
+# carousel-render scratch output (people generate decks alongside the skill)
+*-slides/
+*.png
