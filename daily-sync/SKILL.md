@@ -1,6 +1,6 @@
 ---
 name: daily-sync
-description: Morning briefing for the current project. Detects project from cwd, then gates on the frontmatter: Calendar-enabled projects (AoodBeef/CDC2025/Ledger) get a live Google Calendar query sorted by time + priority; projects with calendar_marker/notion_tasks_db = none brief from project-state.md alone with zero MCP calls. Notion is reconciled via the Calendar mirror, never re-queried live. Use when Wiw types `/daily-sync` or says "what's on today", "today's plan", "วันนี้ทำอะไรบ้าง", "morning briefing", "เริ่มงาน".
+description: Morning briefing for the current project. Detects project from cwd, then gates on the frontmatter: Calendar-enabled projects (AoodBeef/CDC2025) get a live Google Calendar query sorted by time + priority; projects with calendar_marker/notion_tasks_db = none brief from project-state.md + session-log head (both local files) with zero MCP calls. Notion is reconciled via the Calendar mirror, never re-queried live. Use when Wiw types `/daily-sync` or says "what's on today", "today's plan", "วันนี้ทำอะไรบ้าง", "morning briefing", "เริ่มงาน".
 ---
 
 # daily-sync — morning briefing per project
@@ -16,25 +16,30 @@ Wiw runs this at the START of a work session (opposite of `/save-chat` which run
 3. If `project-state.md` doesn't exist → tell Wiw "ไม่เจอ project-state.md — รัน `/save-chat` ก่อนเพื่อ bootstrap project นี้"
 4. Get today's date (PowerShell: `Get-Date -Format "yyyy-MM-dd"`)
 
-## Step 0.5 — Ground in the state (LEAN — costs ~0 extra tokens)
+## Step 0.5 — Ground in the state FIRST: session-log + project-state, BEFORE any MCP call (LEAN — zero MCP/ToolSearch)
 
-`project-state.md` is already auto-loaded via CLAUDE.md, so use it — don't re-read files:
+`project-state.md` is auto-loaded via CLAUDE.md; the per-project session-log is a cheap local read (~15 lines). Read BOTH before any Calendar/Notion tool — this morning grounding is the whole point:
+0. **Read the session-log head first (~15 lines** of `<cwd>\<session_log_file>`, default `session-log.md`). Find the most recent **/save-chat** entry (SKIP `/daily-sync` lines — a sync is a briefing, not work) for the `🔁 Since last session` line (Step 3):
+   - newest /save-chat is today / yesterday / N days ago → phrase relative to today; a 00:00–05:00 save → "overnight save (HH:MM)".
+   - newest head entry is a `/daily-sync` with no save after → `Since last session: opened <when> but never saved — using project-state (<Last updated>) as the last captured point` (don't fabricate a work phrase).
+   - **session-log missing/empty** (new project) → **suppress** the `🔁` line; don't crash, don't guess, don't read the global log for it. (Step 0's missing-project-state abort still takes precedence.)
+   - Match the date heading to today (newest day at TOP — don't read yesterday's tail as today). **Reuse this single head-read at Step 5b — don't re-read.**
 1. **Apply the "🧭 How we work" block** as binding this session (V2.4 canonical, Tight–Loose–Tight, Notion=compass, data-first-but-weekly, lean). Don't make Wiw remind you.
-2. **Lead the briefing with "📍 Resume here"** (the catch-up point) + open follow-ups — not the calendar. Wiw works in weekly batches; the calendar is often empty.
-3. **Freshness check:** if `Last updated` is >2 days ago, say so and ask "what's progressed since <date>?" before trusting the plan. And if it was saved earlier the SAME day, verify what's shipped before treating it as live — the auto-loaded copy can be a stale cache (per `feedback_same_day_state_freshness`).
+2. **Lead the briefing with the next action, grounded — not the calendar:** surface the `## ⏭️ Next /daily-sync` `▶️` line first (the baton; match the section by *contains* `⏭️ Next /daily-sync`), with the `📍 Resume here` catch-up behind it. Wiw works in weekly batches; the calendar is often empty.
+3. **Freshness check:** if `Last updated` is >2 days ago, say so and ask "what's progressed since <date>?" before trusting the plan — and suffix the First-up line with `(set <date>, Nd stale — re-confirm)` rather than presenting it as today's action. **Age the baton by its own `set <date>` token** when the `▶️`/`🎯` line carries one (so a freshly weekly-review-set baton isn't flagged stale just because the last /save-chat is older); fall back to `Last updated` only when no set-date is present. And if it was saved earlier the SAME day, verify what's shipped before treating it as live — the auto-loaded copy can be a stale cache (per `feedback_same_day_state_freshness`).
 4. **Do NOT scan raw FB data** unless (a) today's task is a data/format/timing/review decision, OR (b) the rolling data file is >7 days stale (then flag it, suggest a pull — don't auto-scan). Data updates ~weekly; re-scanning every session wastes tokens.
 
 ## Step 0.6 — Integration gate (decides which steps run — don't skip this)
 
-From the frontmatter (Step 0), read `calendar_marker` and `notion_tasks_db`. They pick the path. **Never call `ToolSearch` or load an MCP tool for a system this project doesn't use** — that loading is the whole token cost.
+From the frontmatter (Step 0), read `calendar_marker` and `notion_tasks_db`. They pick the path. **Compare quote-/case-insensitively:** strip surrounding quotes + whitespace and case-fold before testing — `none`, `"none"`, `None` all mean opt-out (some real files write the quoted form). **Never call `ToolSearch` or load an MCP tool for a system this project doesn't use** — that loading is the whole token cost.
 
 | `calendar_marker` | `notion_tasks_db` | Path |
 |---|---|---|
-| `none` | `none` | **STATE-ONLY** — skip Steps 1 & 2 completely. Zero MCP calls, zero `ToolSearch`. Brief from the auto-loaded `project-state.md` only → Step 3 (state-only format) → Step 4 → Step 5. |
+| `none` | `none` | **STATE-ONLY** — skip Steps 1 & 2 completely. Zero MCP calls, zero `ToolSearch`. Brief from `project-state.md` + the session-log head (~15 lines) — both local files → Step 3 (state-only format) → Step 4 → Step 5. |
 | set | anything | Run Step 1 (Calendar). Notion handled via the Calendar mirror in Step 2 — still no live Notion query. |
 | `none` | set | Rare. Skip Step 1. No cheap live Notion query exists (see Step 2) — brief from state; suggest `/save-chat` if state is stale. |
 
-Most projects (IdeaWeb, Xerathos, WiWGrowth, report, Multi Agens, games, Content-solution) are **STATE-ONLY** and pay almost nothing per run. Only AoodBeef / CDC2025 / Ledger reach the Calendar.
+Most projects (IdeaWeb, Xerathos, WiWGrowth, report, Multi Agens, games, Content-solution, Ledger) are **STATE-ONLY** and pay almost nothing per run. Only AoodBeef / CDC2025 reach the Calendar.
 
 ## Step 1 — Query Calendar (today only)
 
@@ -64,6 +69,9 @@ Instead, gauge mirror freshness from `project-state.md` **`Last updated`**:
 ```
 ☀️ <Project name> — Today's Briefing (<YYYY-MM-DD>)
 
+🔁 Since last session (<when>): <one phrase>     ← from session-log head (Step 0.5); omit the line if suppressed
+<First-up line — render exactly as Step 4 produces it: `▶️ First up: …` or `▶️ First up (from queued — no baton set yet): …`>
+
 ⏰ Scheduled (sorted by time):
 
   09:00-10:00  🎯 [HIGH] <Event title>
@@ -81,8 +89,10 @@ Total: N scheduled events today
 ```
 ☀️ <Project name> — Today's Briefing (<YYYY-MM-DD>)
 
-📍 Resume here: <from project-state.md "📍 Resume here">
-🔜 Queued: <top items from "What's queued next">
+🔁 Since last session (<when>): <one phrase>     ← omit if suppressed (Step 0.5)
+📍 Resume here: <from project-state "📍 Resume here">
+<First-up line — render exactly as Step 4 produces it; this is the one next-action line>
+🔜 Queued: <other items from "What's queued next">
 🧹 Open follow-ups: <rolling items>
 ```
 
@@ -90,9 +100,15 @@ Pull everything from the auto-loaded `project-state.md` — no MCP calls.
 
 ## Step 4 — Suggest first action
 
-End briefing with: "📍 First up: <earliest unfinished high-priority item> at <time>"
+First-up source order (read project-state, never a Notion query):
+1. The `▶️` line(s) from `## ⏭️ Next /daily-sync` (match the section by *contains* `⏭️ Next /daily-sync`; read each `▶️` line verbatim — treat a bare `▶` without the emoji selector as the same marker — keeping any `(carried — …)` suffix; surface BOTH lines if the project runs two lanes).
+2. If that section is absent/empty, fall back IN ORDER to: (a) a `🎯 Next move (… by /weekly-review)` line inside `## What's queued next`, (b) a `▶️` line inside `📍 Resume here`, (c) the top `## What's queued next` bullet, (d) `## Open follow-ups`.
 
-If no scheduled events (or a state-only project) → "📍 First up: <highest-priority item from 'What's queued next' / 'Open follow-ups' in project-state.md>" — drive from the state file, not a Notion query.
+**Always label the source (the action line uses the `▶️` glyph; reserve `📍` for Resume here):**
+- real baton → `▶️ First up: <action>` (add ` at <time>` if a calendar event matches)
+- any fallback → `▶️ First up (from queued — no baton set yet): <action>`
+
+For Calendar projects, prefer the earliest scheduled high-priority event for the time slot, but still show the baton as the first action when the calendar is empty.
 
 ## Step 5 — Log session start
 

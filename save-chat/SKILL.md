@@ -1,6 +1,6 @@
 ---
 name: save-chat
-description: Save current conversation state to project-state.md, append to decisions-log.md if a durable decision was made, sync Notion tasks (today unfinished → interactive carry/done, tomorrow → push to Google Calendar day-by-day). Bootstraps new projects (creates strategy.md, project-state.md, decisions-log.md, Notion page+Tasks DB if missing). Use when Wiw types `/save-chat` or says "save the chat", "save chat", "เซฟ", "บันทึก". For verbatim (full transcript) mode, Wiw triggers with "save chat verbatim", "save chat full", "บันทึกเต็ม", "เซฟทุกข้อความ".
+description: Save current conversation state to project-state.md (incl. the 📍 Resume-here + ⏭️ next-/daily-sync handoff sections), append to decisions-log.md if a durable decision was made, sync Notion tasks (today unfinished → interactive carry/done, tomorrow → push to Google Calendar day-by-day). Bootstraps new projects (creates strategy.md, project-state.md, decisions-log.md, Notion page+Tasks DB if missing). Use when Wiw types `/save-chat` or says "save the chat", "save chat", "เซฟ", "บันทึก". For verbatim (full transcript) mode, Wiw triggers with "save chat verbatim", "save chat full", "บันทึกเต็ม", "เซฟทุกข้อความ".
 ---
 
 # save-chat — multi-project state save + Notion/Calendar sync
@@ -146,6 +146,12 @@ Required structure (below frontmatter):
 ## Where we are now
 <one paragraph — what phase, what was just completed, current system state>
 
+## 📍 Resume here
+<catch-up: where we left off + the decision gate + data/freshness status — the broader picture>
+
+## ⏭️ Next /daily-sync
+▶️ <the most concrete next action for the next session (one per lane, up to two — see rules below) — the baton /daily-sync surfaces first>
+
 ## What's queued next
 - <near-term tasks, dated where known>
 
@@ -166,7 +172,23 @@ Rules:
 - **Keep ≤ 80 lines** below frontmatter
 - **Carry forward open follow-ups** from previous version; drop resolved
 - Preserve frontmatter untouched
-- **Preserve the "🧭 How we work" block verbatim** (stable operating principles near the top — don't rewrite it) and **refresh the "📍 Resume here" pointer** to the next work block + data status + decision gate. Both live in project-state per Wiw's workflow; never drop them on overwrite.
+- **Preserve the "🧭 How we work" block verbatim** (stable operating principles near the top — don't rewrite it).
+- **The two handoff sections are SINGLE-INSTANCE and refreshed every save — never dropped on overwrite:**
+  - Use the exact headings `## 📍 Resume here` and `## ⏭️ Next /daily-sync` (no decoration on the heading itself — put any status into the body).
+  - **Find-or-relocate, don't blind-insert.** Before writing, scan the prior file for a heading *containing* `📍 Resume here` (ignore any trailing ` — …` suffix AND its current position — live files keep it at the top, after 🧭, or near the end). Refresh that one in place, delete any duplicate, and demote a decorated suffix into the body. If none exists, create it right after the 🧭 block. Place `## ⏭️ Next /daily-sync` immediately after `📍 Resume here`. **Exactly one of each per file.**
+  - `📍 Resume here` = the catch-up (where we left off + decision gate + data/freshness status). `## ⏭️ Next /daily-sync` = the baton `daily-sync` reads first: a single `▶️ <imperative first action>` surfaced THIS session (prefer it over any `🎯 Next move (by /weekly-review)` line). Carry both forward unchanged unless this session surfaced a newer action. When this session DOES set a fresh `▶️`, also clear/refresh any now-stale `🎯 Next move (set … by /weekly-review)` line in `## What's queued next` so the two never disagree.
+  - **Zero-progress guard:** if essentially nothing shipped this session, don't distil a baton from an empty session — set the `▶️` line to the top carried open item, suffixed `(carried — no progress <date>)`.
+  - **Multi-lane:** if two distinct active lanes each have a live next-action (e.g. AoodBeef app + content floor), write up to TWO `▶️` lines, one per lane (cap at two — never let it become a backlog). Reserve the `▶️` glyph for THIS section; use a different marker for any inline "next" note elsewhere in the body. When refreshing the `📍 Resume here` body, convert any pre-existing inline `▶️` note (e.g. a carried-forward `▶️ APP NEXT:`) to a non-`▶️` marker (🛠/📣) so `▶️` lives ONLY under `## ⏭️ Next /daily-sync`.
+  - **Bootstrap / no-work-yet save:** still create both — `📍 Resume here` = "project bootstrapped — no work yet" and the `▶️` line = the first queued item, or omit it. Never fabricate a baton.
+
+**Example — the two handoff sections, filled in:**
+```markdown
+## 📍 Resume here
+Dashboard redesign (dark UI + 9:16 snapshot) built + headless-verified; deploy pending. Trading state unchanged since Jun 14; 8 positions open. Gate: deploy before the next trade session.
+
+## ⏭️ Next /daily-sync
+▶️ Deploy the redesigned dashboard (paste dashboard.html + dashboardWebApp.gs → Apps Script → Manage deployments → New version), then run the 8-position management loop.
+```
 
 ### Step 2 — Append to decisions-log if durable decision was made
 
@@ -240,7 +262,7 @@ Routine close-outs do NOT warrant a log entry.
 **5a. Compute runtimes:**
 - Get current time as `skill_end_time` (PowerShell: `Get-Date -Format "yyyy-MM-dd HH:mm:ss"`)
 - `skill_runtime` = `skill_end_time` − `skill_start_time` (in seconds)
-- Resolve `session_log_file` path: use frontmatter field if set, else default `<cwd>\session-log.md`
+- Resolve `session_log_file` path: use the frontmatter field if set, else default `session-log.md` in the **saved project's own folder** (the folder whose `project-state.md` this save targets — not necessarily literal `<cwd>`, so a cross-folder save still logs to the right project)
 - Read per-project session-log → find latest `/daily-sync` entry today (same date)
 - If found → `session_duration` = `skill_start_time` − `daily_sync_time`
 - If not found → no session duration ("(no /daily-sync — single save)")
@@ -336,6 +358,8 @@ next_session_should_read_first: [...]
 ### Step V4 — Run state-only Steps 1-5
 
 Reference the transcript path in `Source conversation:` field of project-state.md and in `Conversation:` field of decisions-log.md (if applicable).
+
+**The "copy prior turns UNCHANGED" rule (above) applies ONLY to transcript turns.** The project-state Steps 1-5 ALWAYS run in full and ALWAYS refresh the `## 📍 Resume here` + `## ⏭️ Next /daily-sync` sections — verbatim mode never freezes the state snapshot.
 
 ### Step V5 — Confirm
 
